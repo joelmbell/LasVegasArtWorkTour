@@ -7,18 +7,20 @@
 //
 
 import UIKit
+import CoreLocation
 
 fileprivate let dataURL = "https://opendata.lasvegasnevada.gov/resource/nefs-tayh.json"
 fileprivate let cellIdentifier = "CellIdentifier"
+
 
 class ArtworkListViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
     
     @IBOutlet var tableView: UITableView?
     
-    fileprivate lazy var dataService: DataService = {
-        let dataService = DataService()
-        return dataService
-    }()
+    fileprivate let dataService = DataService()
+    fileprivate let locationService = LocationService()
+    
+    var currentLocation: CLLocation?
     
     var artworks = [Artwork]()
     
@@ -27,14 +29,31 @@ class ArtworkListViewController: UIViewController, UITableViewDelegate, UITableV
         
         tableView?.register(ArtworkCell.self, forCellReuseIdentifier: cellIdentifier)
         
+        updateData()
+    }
+    
+    fileprivate func updateData() {
         self.dataService.download(from: dataURL) { response in
             switch response {
             case .success(let value):
                 self.artworks = ArtworkParser.parse(value)
-                self.tableView?.reloadData()
+                self.updateCurrentLocation()
             case .failure(let error):
                 print(error)
                 
+            }
+        }
+    }
+    
+    fileprivate func updateCurrentLocation() {
+        self.locationService.fetchLocation { (result) in
+            switch result {
+            case .success(let location):
+                self.currentLocation = location
+                self.tableView?.reloadData()
+            case .failure(let error):
+                print("Error Fetching Location: \(error)")
+                self.currentLocation = nil
             }
         }
     }
@@ -49,8 +68,16 @@ class ArtworkListViewController: UIViewController, UITableViewDelegate, UITableV
         
         let artwork = self.artworks[indexPath.row]
         cell.textLabel?.text = artwork.name
-        cell.detailTextLabel?.text = artwork.locationDesc
         
+        var locString = artwork.locationDesc
+        if let currentLoc = self.currentLocation {
+            let artworkLoc = CLLocation(latitude: artwork.coordinate.latitude, longitude: artwork.coordinate.longitude)
+            let miles = currentLoc.miles(from: artworkLoc)
+            locString = String(format: "%.2f miles away.", miles)
+        }
+        
+        cell.detailTextLabel?.text = locString
+
         return cell
     }
     
